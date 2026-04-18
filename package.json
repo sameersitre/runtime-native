@@ -1,0 +1,67 @@
+{
+  "name": "@flotrace/runtime-native",
+  "version": "0.1.0",
+  "description": "React Native adapter for FloTrace — enables real-time render tracking in iOS/Android apps via Metro.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./dist/index.mjs",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run typecheck",
+    "release:patch": "npm version patch && npm publish",
+    "release:minor": "npm version minor && npm publish",
+    "release:major": "npm version major && npm publish"
+  },
+  "dependencies": {
+    "@flotrace/runtime-core": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.9.0",
+    "react-native": ">=0.64.0",
+    "@types/react": ">=16.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "react",
+    "react-native",
+    "devtools",
+    "profiler",
+    "render",
+    "performance",
+    "flotrace"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flotrace/flotrace.git",
+    "directory": "packages/runtime-native"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
