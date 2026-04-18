@@ -32,3 +32,11 @@ export type { FloTraceProviderNativeProps } from './FloTraceProviderNative';
 // Metro host resolver (exported for tests / advanced configuration)
 export { resolveMetroHost, extractHostFromUrl } from './metroHostResolver';
 export type { MetroHostResolution } from './metroHostResolver';
+
+// RN framework detection tables (exported for advanced users who want to extend
+// or override the default lists via `installFiberTreeWalker()` directly).
+export {
+  RN_FRAMEWORK_COMPONENT_NAMES,
+  RN_FRAMEWORK_PATH_PATTERNS,
+  RN_HOST_COMPONENT_SKIP_PREFIXES,
+} from './frameworkNamesNative';

@@ -50,6 +50,11 @@ import {
   getTimeline,
 } from '@flotrace/runtime-core';
 import { resolveMetroHost } from './metroHostResolver';
+import {
+  RN_FRAMEWORK_COMPONENT_NAMES,
+  RN_FRAMEWORK_PATH_PATTERNS,
+  RN_HOST_COMPONENT_SKIP_PREFIXES,
+} from './frameworkNamesNative';
 
 // React Native globals — typed minimally so we don't require RN types at build time.
 declare const __DEV__: boolean | undefined;
@@ -208,7 +213,11 @@ export function FloTraceProviderNative({
   // install during render is the fiber walker (needed before first commit).
   if (mergedConfig.enabled) {
     getNativeClient(mergedConfig);
-    installFiberTreeWalker();
+    installFiberTreeWalker({
+      frameworkComponentNames: [...RN_FRAMEWORK_COMPONENT_NAMES],
+      frameworkPathPatterns: [...RN_FRAMEWORK_PATH_PATTERNS],
+      hostComponentSkipPrefixes: [...RN_HOST_COMPONENT_SKIP_PREFIXES],
+    });
   }
 
   useEffect(() => {
@@ -269,7 +278,11 @@ export function FloTraceProviderNative({
             break;
 
           case 'ext:startTreeTracking':
-            installFiberTreeWalker();
+            installFiberTreeWalker({
+              frameworkComponentNames: [...RN_FRAMEWORK_COMPONENT_NAMES],
+              frameworkPathPatterns: [...RN_FRAMEWORK_PATH_PATTERNS],
+              hostComponentSkipPrefixes: [...RN_HOST_COMPONENT_SKIP_PREFIXES],
+            });
             break;
 
           case 'ext:stopTreeTracking':
