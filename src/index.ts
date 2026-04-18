@@ -40,3 +40,13 @@ export {
   RN_FRAMEWORK_PATH_PATTERNS,
   RN_HOST_COMPONENT_SKIP_PREFIXES,
 } from './frameworkNamesNative';
+
+// React Navigation tracker (Phase 3 — active-screen filter). Normally invoked
+// implicitly by FloTraceProviderNative's `navigationRef` prop; exported for
+// advanced setups that install the walker manually.
+export {
+  installNavigationTracker,
+  disposeNavigationTracker,
+  shouldPruneNode,
+} from './navigationTracker';
+export type { NavigationRefLike } from './navigationTracker';

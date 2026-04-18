@@ -55,6 +55,12 @@ import {
   RN_FRAMEWORK_PATH_PATTERNS,
   RN_HOST_COMPONENT_SKIP_PREFIXES,
 } from './frameworkNamesNative';
+import {
+  installNavigationTracker,
+  disposeNavigationTracker,
+  shouldPruneNode,
+  type NavigationRefLike,
+} from './navigationTracker';
 
 // React Native globals — typed minimally so we don't require RN types at build time.
 declare const __DEV__: boolean | undefined;
@@ -132,10 +138,11 @@ export interface FloTraceProviderNativeProps {
   /** Optional TanStack Query client to track. */
   queryClient?: TanStackQueryClientApi;
   /**
-   * React Navigation ref. Reserved for Phase 3 (active-screen filter); unused in Phase 1.
-   * Accepted in the signature so Phase 3 doesn't require a breaking API change.
+   * React Navigation container ref. When provided, FloTrace tracks focused routes
+   * and hides inactive-screen subtrees from the desktop tree. Pass the same ref
+   * you hand to `<NavigationContainer ref={...}>`.
    */
-  navigationRef?: unknown;
+  navigationRef?: NavigationRefLike | null;
 }
 
 /**
@@ -160,6 +167,7 @@ export function FloTraceProviderNative({
   stores,
   reduxStore,
   queryClient,
+  navigationRef,
 }: FloTraceProviderNativeProps): JSX.Element {
   // Prod-build no-op. Metro strips `__DEV__` guards in release mode, so the entire
   // subtree below this check is tree-shaken out of production bundles.
@@ -217,8 +225,18 @@ export function FloTraceProviderNative({
       frameworkComponentNames: [...RN_FRAMEWORK_COMPONENT_NAMES],
       frameworkPathPatterns: [...RN_FRAMEWORK_PATH_PATTERNS],
       hostComponentSkipPrefixes: [...RN_HOST_COMPONENT_SKIP_PREFIXES],
+      pruneSubtree: shouldPruneNode,
     });
   }
+
+  // Navigation tracker lifecycle — attach/detach when the ref identity changes.
+  // Keeping this in an effect (vs. the render-phase early-patching above) avoids
+  // churn: `installNavigationTracker` detaches the prior subscription each call.
+  useEffect(() => {
+    if (!mergedConfig.enabled) return;
+    installNavigationTracker(navigationRef ?? null);
+    return () => disposeNavigationTracker();
+  }, [mergedConfig.enabled, navigationRef]);
 
   useEffect(() => {
     if (!mergedConfig.enabled) return;
@@ -282,6 +300,7 @@ export function FloTraceProviderNative({
               frameworkComponentNames: [...RN_FRAMEWORK_COMPONENT_NAMES],
               frameworkPathPatterns: [...RN_FRAMEWORK_PATH_PATTERNS],
               hostComponentSkipPrefixes: [...RN_HOST_COMPONENT_SKIP_PREFIXES],
+              pruneSubtree: shouldPruneNode,
             });
             break;
 
