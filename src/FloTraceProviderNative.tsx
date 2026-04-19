@@ -61,6 +61,10 @@ import {
   shouldPruneNode,
   type NavigationRefLike,
 } from './navigationTracker';
+import {
+  installNetworkTrackerNative,
+  uninstallNetworkTrackerNative,
+} from './networkTrackerNative';
 
 // React Native globals — typed minimally so we don't require RN types at build time.
 declare const __DEV__: boolean | undefined;
@@ -281,7 +285,12 @@ export function FloTraceProviderNative({
                 installTanStackQueryTracker(queryClientRef.current!, client),
               );
             }
-            // Router / network trackers deferred to later phases; no-op on RN here.
+            if (message.options?.trackNetwork) {
+              safeTrackerOp('Network install', () =>
+                installNetworkTrackerNative(client),
+              );
+            }
+            // Router tracker is web-only (History API); skipped on RN.
             safeTrackerOp('Timeline install', () => installTimelineTracker(client));
             console.log('[FloTrace] (native) Tracking started with options:', message.options);
             break;
@@ -291,6 +300,7 @@ export function FloTraceProviderNative({
             safeTrackerOp('Zustand uninstall', uninstallZustandTracker);
             safeTrackerOp('Redux uninstall', uninstallReduxTracker);
             safeTrackerOp('TanStack Query uninstall', uninstallTanStackQueryTracker);
+            safeTrackerOp('Network uninstall', uninstallNetworkTrackerNative);
             safeTrackerOp('Timeline uninstall', uninstallTimelineTracker);
             console.log('[FloTrace] (native) Tracking stopped');
             break;
@@ -403,11 +413,18 @@ export function FloTraceProviderNative({
             safeTrackerOp('TanStack Query uninstall', uninstallTanStackQueryTracker);
             break;
 
-          // Router + Network tracker start/stop are web-only for now; ignore on RN.
+          // Router tracking is web-only (History API); ignore on RN.
           case 'ext:startRouterTracking':
           case 'ext:stopRouterTracking':
+            break;
+
           case 'ext:startNetworkCapture':
+            safeTrackerOp('Network install', () =>
+              installNetworkTrackerNative(client),
+            );
+            break;
           case 'ext:stopNetworkCapture':
+            safeTrackerOp('Network uninstall', uninstallNetworkTrackerNative);
             break;
 
           case 'ext:requestState':
@@ -433,6 +450,7 @@ export function FloTraceProviderNative({
         safeTrackerOp('cleanup zustandTracker', uninstallZustandTracker);
         safeTrackerOp('cleanup reduxTracker', uninstallReduxTracker);
         safeTrackerOp('cleanup tanstackQueryTracker', uninstallTanStackQueryTracker);
+        safeTrackerOp('cleanup networkTracker', uninstallNetworkTrackerNative);
         safeTrackerOp('cleanup timelineTracker', uninstallTimelineTracker);
         safeTrackerOp('cleanup websocketClient', disposeNativeClient);
       }, 100);

@@ -50,3 +50,13 @@ export {
   shouldPruneNode,
 } from './navigationTracker';
 export type { NavigationRefLike } from './navigationTracker';
+
+// RN-safe network tracker (Phase 5 — fetch + XHR only, no JSON.parse /
+// Response.prototype.json patches). Normally invoked implicitly by the
+// provider when `trackNetwork` is enabled; exported for advanced setups.
+// Note: findFetchOrigin / hasActiveTags are re-exported above via
+// `export * from '@flotrace/runtime-core'`.
+export {
+  installNetworkTrackerNative,
+  uninstallNetworkTrackerNative,
+} from './networkTrackerNative';
