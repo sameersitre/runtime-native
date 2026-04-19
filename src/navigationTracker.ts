@@ -22,13 +22,21 @@
 import type { LiveTreeNode } from '@flotrace/runtime-core';
 import { getFiberRefMap } from '@flotrace/runtime-core';
 
-interface NavigationState {
-  index: number;
-  routes: Array<{ key: string; state?: NavigationState }>;
+/**
+ * Structural subset of React Navigation's NavigationState. Intentionally
+ * permissive to stay compatible with both `NavigationState` and `PartialState`
+ * (where `index` can be omitted) — the consumer's `NavigationContainerRef`
+ * type mixes both, and a stricter shape makes `ref={navigationRef}` fail to
+ * typecheck for no runtime gain (we already handle missing index safely).
+ */
+interface NavigationStateLike {
+  index?: number;
+  routes: ReadonlyArray<{ key?: string; state?: NavigationStateLike }>;
 }
 
 export interface NavigationRefLike {
-  getRootState?: () => NavigationState | undefined;
+  isReady?: () => boolean;
+  getRootState?: () => NavigationStateLike | undefined;
   addListener?: (event: 'state', cb: () => void) => () => void;
 }
 
@@ -38,14 +46,33 @@ interface FiberLike {
   memoizedProps?: unknown;
 }
 
+// Poll interval + cap for waiting on the NavigationContainer to mount. React
+// Navigation's `createNavigationContainerRef()` returns a proxy that emits
+// uninitialized-ref warnings and silently drops listener registrations until
+// the container attaches; subscribing before that yields zero state updates.
+const READY_POLL_INTERVAL_MS = 100;
+const READY_POLL_TIMEOUT_MS = 30_000;
+
 let focusedRouteKeys: Set<string> = new Set();
 let activeRef: NavigationRefLike | null = null;
 let unsubscribe: (() => void) | null = null;
+let readyPollTimer: ReturnType<typeof setInterval> | null = null;
 
-function collectFocusedKeys(state: NavigationState | undefined, out: Set<string>): void {
+// Clear the ready-poll interval. Safe to call when no timer is active.
+// `clearInterval` on a stale handle can throw under some RN shims, so guard.
+function stopReadyPolling(): void {
+  if (readyPollTimer) {
+    try { clearInterval(readyPollTimer); } catch { /* non-fatal */ }
+    readyPollTimer = null;
+  }
+}
+
+function collectFocusedKeys(state: NavigationStateLike | undefined, out: Set<string>): void {
   if (!state || !Array.isArray(state.routes)) return;
+  // PartialState can omit `index` — treat as "no focused route at this level"
+  if (typeof state.index !== 'number') return;
   const focused = state.routes[state.index];
-  if (!focused) return;
+  if (!focused || typeof focused.key !== 'string') return;
   out.add(focused.key);
   if (focused.state) collectFocusedKeys(focused.state, out);
 }
@@ -62,14 +89,9 @@ function refreshFocusedRoutes(): void {
 }
 
 /**
- * Subscribe to navigation state. Safe to call multiple times — later calls
- * replace the earlier subscription. Pass `null`/`undefined` to disable.
+ * Bind the active ref to state updates. Assumes the container is ready.
  */
-export function installNavigationTracker(ref: NavigationRefLike | null | undefined): void {
-  disposeNavigationTracker();
-  if (!ref) return;
-  activeRef = ref;
-
+function attachSubscription(ref: NavigationRefLike): void {
   refreshFocusedRoutes();
 
   if (typeof ref.addListener === 'function') {
@@ -81,7 +103,59 @@ export function installNavigationTracker(ref: NavigationRefLike | null | undefin
   }
 }
 
+/**
+ * Subscribe to navigation state. Safe to call multiple times — later calls
+ * replace the earlier subscription. Pass `null`/`undefined` to disable.
+ *
+ * When the ref exposes `isReady()` (React Navigation v6+), waits for the
+ * NavigationContainer to mount before reading state or attaching listeners.
+ * Without this guard the proxy warns ("The 'navigation' object hasn't been
+ * initialize[d]") and the `addListener` call no-ops, leaving focusedRouteKeys
+ * permanently empty.
+ */
+export function installNavigationTracker(ref: NavigationRefLike | null | undefined): void {
+  disposeNavigationTracker();
+  if (!ref) return;
+  activeRef = ref;
+
+  const hasReadyCheck = typeof ref.isReady === 'function';
+  if (!hasReadyCheck || ref.isReady!()) {
+    attachSubscription(ref);
+    return;
+  }
+
+  const startedAt = Date.now();
+  readyPollTimer = setInterval(() => {
+    // Ref replaced or disposed while polling — abandon this loop.
+    if (activeRef !== ref) {
+      stopReadyPolling();
+      return;
+    }
+
+    let ready = false;
+    try {
+      ready = ref.isReady!() === true;
+    } catch {
+      ready = false;
+    }
+
+    if (ready) {
+      stopReadyPolling();
+      attachSubscription(ref);
+      return;
+    }
+
+    if (Date.now() - startedAt >= READY_POLL_TIMEOUT_MS) {
+      stopReadyPolling();
+      console.warn(
+        '[FloTrace] (native) NavigationContainer did not become ready within 30s — active-screen filter disabled.',
+      );
+    }
+  }, READY_POLL_INTERVAL_MS);
+}
+
 export function disposeNavigationTracker(): void {
+  stopReadyPolling();
   if (unsubscribe) {
     try { unsubscribe(); } catch { /* non-fatal */ }
     unsubscribe = null;

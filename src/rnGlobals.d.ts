@@ -94,3 +94,18 @@ declare const URL: RNURLCtor;
 declare const XMLHttpRequest: RNXHRCtor;
 declare function setInterval(handler: () => void, ms: number): unknown;
 declare function clearInterval(handle: unknown): void;
+declare function setTimeout(handler: () => void, ms: number): unknown;
+declare function clearTimeout(handle: unknown): void;
+
+// --- `react-native` module surface (minimal subset we actually use) ---
+// Full RN typings would require @types/react-native; we only touch two symbols
+// and declare them here to keep the provider's static import type-clean.
+declare module 'react-native' {
+  export const Platform: {
+    OS: 'ios' | 'android' | 'web' | 'windows' | 'macos';
+  };
+  export const NativeModules: {
+    SourceCode?: { scriptURL?: string };
+    [key: string]: unknown;
+  };
+}

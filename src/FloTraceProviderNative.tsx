@@ -28,7 +28,8 @@ import type {
 } from '@flotrace/runtime-core';
 import {
   DEFAULT_CONFIG,
-  FloTraceWebSocketClient,
+  getWebSocketClient,
+  disposeWebSocketClient,
   serializeProps,
   getChangedKeys,
   installFiberTreeWalker,
@@ -48,10 +49,12 @@ import {
   installTimelineTracker,
   uninstallTimelineTracker,
   getTimeline,
+  getFiberRefMap,
 } from '@flotrace/runtime-core';
 import { resolveMetroHost } from './metroHostResolver';
 import {
   RN_FRAMEWORK_COMPONENT_NAMES,
+  RN_FRAMEWORK_NAME_PATTERNS,
   RN_FRAMEWORK_PATH_PATTERNS,
   RN_HOST_COMPONENT_SKIP_PREFIXES,
 } from './frameworkNamesNative';
@@ -65,44 +68,14 @@ import {
   installNetworkTrackerNative,
   uninstallNetworkTrackerNative,
 } from './networkTrackerNative';
+// Static import — ESM-compiled output (`.mjs`) would otherwise rely on tsup's `__require`
+// shim, which fails under iOS bridgeless / Hermes New Architecture where `require` is not
+// a module-scope global. `react-native` is a non-optional peer dep, so consumers always
+// have it available; react-native-web consumers are caught by the `document` guard below.
+import { Platform, NativeModules } from 'react-native';
 
 // React Native globals — typed minimally so we don't require RN types at build time.
 declare const __DEV__: boolean | undefined;
-
-// Dynamically load React Native to avoid a hard dependency. We require() it so bundlers
-// that don't see the import (e.g., web builds accidentally consuming this file) don't fail.
-// The package.json `react-native` export condition steers Metro to the right entry.
-interface RNHandle {
-  Platform: { OS: 'ios' | 'android' | 'web' | 'windows' | 'macos' };
-  NativeModules: { SourceCode?: { scriptURL?: string } };
-}
-
-function loadReactNative(): RNHandle | null {
-  try {
-    // require at runtime so the web tree-shaker doesn't try to resolve it.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const rn = require('react-native') as RNHandle;
-    return rn;
-  } catch {
-    return null;
-  }
-}
-
-// Singleton WS client for RN. We don't reuse runtime-core's `getWebSocketClient` singleton
-// because RN vs. web singletons could collide in a shared-codebase app bundle.
-let nativeClientInstance: FloTraceWebSocketClient | null = null;
-function getNativeClient(config?: ResolvedFloTraceConfig): FloTraceWebSocketClient {
-  if (!nativeClientInstance) {
-    nativeClientInstance = new FloTraceWebSocketClient(config);
-  }
-  return nativeClientInstance;
-}
-function disposeNativeClient(): void {
-  if (nativeClientInstance) {
-    nativeClientInstance.disconnect();
-    nativeClientInstance = null;
-  }
-}
 
 // Module-level Strict Mode cleanup guard — matches the web provider's pattern.
 let pendingCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -190,15 +163,7 @@ export function FloTraceProviderNative({
     return <>{children}</>;
   }
 
-  const rn = loadReactNative();
-  if (!rn) {
-    console.warn(
-      '[FloTrace] react-native not found. FloTraceProviderNative only runs inside a React Native app. Skipping attach.',
-    );
-    return <>{children}</>;
-  }
-
-  const { host, platform } = resolveMetroHost(config.host, rn.Platform, rn.NativeModules);
+  const { host, platform } = resolveMetroHost(config.host, Platform, NativeModules);
 
   const mergedConfig: ResolvedFloTraceConfig = {
     ...DEFAULT_CONFIG,
@@ -224,12 +189,18 @@ export function FloTraceProviderNative({
   // Early patching. RN has no URL DOM API and no History — the only thing to
   // install during render is the fiber walker (needed before first commit).
   if (mergedConfig.enabled) {
-    getNativeClient(mergedConfig);
+    getWebSocketClient(mergedConfig);
     installFiberTreeWalker({
       frameworkComponentNames: [...RN_FRAMEWORK_COMPONENT_NAMES],
+      frameworkComponentNamePatterns: [...RN_FRAMEWORK_NAME_PATTERNS],
       frameworkPathPatterns: [...RN_FRAMEWORK_PATH_PATTERNS],
       hostComponentSkipPrefixes: [...RN_HOST_COMPONENT_SKIP_PREFIXES],
       pruneSubtree: shouldPruneNode,
+      // Native default: opt INTO strict mode so library wrappers without evidence
+      // get hidden automatically. Consumers can pass `userOnlyStrict: false` to
+      // A/B back to the name-list approach.
+      userOnlyStrict: mergedConfig.userOnlyStrict !== false,
+      userAllowPatterns: mergedConfig.userAllowPatterns ?? [],
     });
   }
 
@@ -242,6 +213,41 @@ export function FloTraceProviderNative({
     return () => disposeNavigationTracker();
   }, [mergedConfig.enabled, navigationRef]);
 
+  // Dev-only guardrail: if the consumer has a NavigationContainer in the tree
+  // but did not wire a `navigationRef` prop, the active-screen prune silently
+  // does nothing and the desktop tree fills with inactive-screen components.
+  // Fire a one-shot warning 3s after mount (tree populated by then) so future
+  // consumers hit a loud message instead of puzzling over stale nodes.
+  useEffect(() => {
+    if (!mergedConfig.enabled) return;
+    if (typeof __DEV__ !== 'undefined' && !__DEV__) return;
+    if (navigationRef) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const map = getFiberRefMap();
+        for (const fiber of map.values()) {
+          const type = (fiber as { type?: unknown }).type;
+          if (!type || typeof type !== 'object') continue;
+          const named = type as { displayName?: string; name?: string };
+          const name = named.displayName ?? named.name;
+          if (name === 'NavigationContainer' || name === 'BaseNavigationContainer') {
+            console.warn(
+              '[FloTrace] NavigationContainer detected but no `navigationRef` prop was passed ' +
+              'to FloTraceProviderNative — the tree will include components from inactive ' +
+              'screens. See https://flotrace.dev/docs/react-native#navigation-ref',
+            );
+            return;
+          }
+        }
+      } catch {
+        /* non-fatal: walker may not have populated yet */
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [mergedConfig.enabled, navigationRef]);
+
   useEffect(() => {
     if (!mergedConfig.enabled) return;
 
@@ -250,7 +256,7 @@ export function FloTraceProviderNative({
       pendingCleanupTimer = null;
     }
 
-    const client = getNativeClient();
+    const client = getWebSocketClient();
 
     const unsubConnection = client.onConnectionChange((isConnected) => {
       setConnected(isConnected);
@@ -452,7 +458,7 @@ export function FloTraceProviderNative({
         safeTrackerOp('cleanup tanstackQueryTracker', uninstallTanStackQueryTracker);
         safeTrackerOp('cleanup networkTracker', uninstallNetworkTrackerNative);
         safeTrackerOp('cleanup timelineTracker', uninstallTimelineTracker);
-        safeTrackerOp('cleanup websocketClient', disposeNativeClient);
+        safeTrackerOp('cleanup websocketClient', disposeWebSocketClient);
       }, 100);
     };
   }, [mergedConfig.enabled, mergedConfig.port, mergedConfig.host, mergedConfig.appName]);
@@ -468,7 +474,7 @@ export function FloTraceProviderNative({
     ) => {
       try {
         if (!enabledRef.current) return;
-        const client = getNativeClient();
+        const client = getWebSocketClient();
         if (!client.connected) return;
 
         const normalizedPhase = phase === 'nested-update' ? 'update' : phase;
@@ -513,7 +519,7 @@ export function useTrackProps(componentName: string, props: Record<string, unkno
   useEffect(() => {
     try {
       if (!floTrace?.enabled || !floTrace.config.includeProps) return;
-      const client = getNativeClient();
+      const client = getWebSocketClient();
       if (!client.connected) return;
 
       const changedKeys = getChangedKeys(prevPropsRef.current, props);
