@@ -68,6 +68,7 @@ import {
   installNetworkTrackerNative,
   uninstallNetworkTrackerNative,
 } from './networkTrackerNative';
+import { resolveNativeAppIdentity, getReactNativeVersion } from './nativeAppIdentity';
 // Static import — ESM-compiled output (`.mjs`) would otherwise rely on tsup's `__require`
 // shim, which fails under iOS bridgeless / Hermes New Architecture where `require` is not
 // a module-scope global. `react-native` is a non-optional peer dep, so consumers always
@@ -165,6 +166,13 @@ export function FloTraceProviderNative({
 
   const { host, platform } = resolveMetroHost(config.host, Platform, NativeModules);
 
+  // Probe installed identity libs (expo-application, react-native-device-info)
+  // + iOS SettingsManager for bundle id / display name / app version. All
+  // probes are optional — the user never needs to install anything.
+  const fallbackName = config.appName ?? DEFAULT_CONFIG.appName;
+  const identity = resolveNativeAppIdentity(fallbackName);
+  const rnVersion = getReactNativeVersion();
+
   const mergedConfig: ResolvedFloTraceConfig = {
     ...DEFAULT_CONFIG,
     // Native has no browser URL — leave getAppUrl undefined (runtime:ready will omit appUrl).
@@ -173,6 +181,12 @@ export function FloTraceProviderNative({
     platform,
     // If user passed an explicit host, use it; otherwise use the resolver's choice.
     host: config.host ?? host,
+    // Derived identity — user's explicit config.appId / config.appName still win.
+    appName: config.appName ?? identity.appName ?? DEFAULT_CONFIG.appName,
+    appId: config.appId ?? identity.appId,
+    appVersion: config.appVersion ?? identity.appVersion,
+    frameworkName: config.frameworkName ?? identity.frameworkName,
+    reactNativeVersion: config.reactNativeVersion ?? rnVersion,
   };
 
   const [connected, setConnected] = React.useState(false);
@@ -266,8 +280,12 @@ export function FloTraceProviderNative({
     const unsubMessage = client.onMessage((message) => {
       try {
         switch (message.type) {
+          // Heartbeat is handled by the dedicated `runtime:pong` path inside
+          // websocketClient (sent before fan-out and returned), so this case
+          // is never reached. Retained as a documented no-op to make the
+          // absence of a `runtime:ready` re-send intentional — a truncated
+          // ready would overwrite good registry metadata on every 5s tick.
           case 'ext:ping':
-            client.sendImmediate({ type: 'runtime:ready', appName: mergedConfig.appName });
             break;
 
           case 'ext:startTracking':
