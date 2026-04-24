@@ -50,6 +50,7 @@ import {
   uninstallTimelineTracker,
   getTimeline,
   getFiberRefMap,
+  resolveValueTrace,
 } from '@flotrace/runtime-core';
 import { resolveMetroHost } from './metroHostResolver';
 import {
@@ -402,6 +403,38 @@ export function FloTraceProviderNative({
                 nodeId: message.nodeId,
                 componentName,
                 event,
+              });
+            }
+            break;
+          }
+
+          // Value Lineage — resolve the origin chain for a prop or hook value.
+          case 'ext:traceValue': {
+            try {
+              const trace = resolveValueTrace({
+                nodeId: message.nodeId,
+                propPath: message.propPath,
+                hookPath: message.hookPath,
+              });
+              client.sendImmediate({
+                type: 'runtime:valueTrace',
+                trace: { requestId: message.requestId, ...trace },
+                timestamp: Date.now(),
+              });
+            } catch (error) {
+              console.error('[FloTrace] resolveValueTrace threw:', error);
+              client.sendImmediate({
+                type: 'runtime:valueTrace',
+                trace: {
+                  requestId: message.requestId,
+                  rootNodeId: message.nodeId,
+                  rootPropPath: message.propPath,
+                  rootHookPath: message.hookPath,
+                  steps: [],
+                  resolvedAtMs: Date.now(),
+                  error: 'value-not-found',
+                },
+                timestamp: Date.now(),
               });
             }
             break;
