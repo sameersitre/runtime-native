@@ -52,6 +52,9 @@ import {
   getFiberRefMap,
   resolveValueTrace,
 } from '@flotrace/runtime-core';
+import pkg from '../package.json';
+
+const RUNTIME_NATIVE_VERSION: string = pkg.version;
 import { resolveMetroHost } from './metroHostResolver';
 import {
   RN_FRAMEWORK_COMPONENT_NAMES,
@@ -188,6 +191,7 @@ export function FloTraceProviderNative({
     appVersion: config.appVersion ?? identity.appVersion,
     frameworkName: config.frameworkName ?? identity.frameworkName,
     reactNativeVersion: config.reactNativeVersion ?? rnVersion,
+    runtimeVersion: config.runtimeVersion ?? RUNTIME_NATIVE_VERSION,
   };
 
   const [connected, setConnected] = React.useState(false);
