@@ -1,28 +1,33 @@
 # @flotrace/runtime-native
 
-React Native adapter for FloTrace — enables real-time component tree visualization, render tracking, state management monitoring, and network health analysis for iOS / Android apps via Metro.
+**Flipper is dead. RN DevTools is incomplete. Reactotron needs setup. FloTrace fills the gap.**
 
-> **Companion to the FloTrace desktop app.** Download it from [flotrace.dev](https://flotrace.dev).
+A live debugger for React Native (iOS / Android) that shows you what your app is actually doing — every render, every prop change, every store mutation, every network call — without changing how you ship code.
 
-## Installation
+This package is the runtime that connects an Expo / bare RN app to the FloTrace desktop. Drop it in once and you get:
+
+- **A live component tree** for what's actually on screen — inactive `react-native-screens`, hidden modals, and library wrappers (Reanimated, Gesture Handler, Safe Area, FlashList, etc.) are filtered out by default so the tree stays scoped.
+- **Render reasons that survive Hermes / New Architecture / bridgeless mode** — props/state/context diffs without source maps.
+- **All your state in one panel** — Zustand, Redux, TanStack Query. No Reactotron + Redux DevTools + RN DevTools dance.
+- **A safe network tracker** — patches `fetch` and `XMLHttpRequest` only (no `JSON.parse` patches that crash the bridge), with Metro/Expo noise filtered out and API → store causal correlation.
+- **Auto-detected Metro host** — `127.0.0.1` for iOS sim, `10.0.2.2` for Android emulator, `scriptURL` host for physical devices. No config in the common case.
+- **Multi-app support** — connect your iOS sim *and* Android emulator at the same time and switch between them in the desktop.
+
+Source code never leaves your machine. The runtime is `__DEV__`-gated and tree-shakes out of production bundles.
+
+> **Companion to the FloTrace desktop app** — [download it from flotrace.dev](https://flotrace.dev/download).
+
+[**Docs**](https://flotrace.dev/docs/runtime-native) · [**Compare to Reactotron / Flipper**](https://flotrace.dev/compare/reactotron) · [**Report an issue**](https://github.com/flotrace)
+
+---
+
+## 30-second setup
 
 ```bash
 npm install -D @flotrace/runtime-native
-# or
-yarn add -D @flotrace/runtime-native
-# or
-pnpm add -D @flotrace/runtime-native
 ```
 
-**Peer dependencies:**
-- `react >= 16.9.0`
-- `react-native >= 0.64.0`
-
-## Quick Start
-
-Wrap the root of your app with `<FloTraceProviderNative>`:
-
-### Expo Router (recommended for new apps)
+### Expo Router
 
 ```tsx
 // app/_layout.tsx
@@ -43,11 +48,10 @@ export default function RootLayout() {
 ```tsx
 // App.tsx
 import { FloTraceProviderNative } from '@flotrace/runtime-native';
-import { AppRoot } from './AppRoot';
 
 export default function App() {
   return (
-    <FloTraceProviderNative config={{ appName: 'My Expo App' }}>
+    <FloTraceProviderNative config={{ appName: 'My App' }}>
       <AppRoot />
     </FloTraceProviderNative>
   );
@@ -58,57 +62,27 @@ export default function App() {
 
 ```tsx
 // index.js
-import 'react-native-gesture-handler';
 import { AppRegistry } from 'react-native';
 import { FloTraceProviderNative } from '@flotrace/runtime-native';
 import App from './App';
 import { name as appName } from './app.json';
 
-function Root() {
-  return (
-    <FloTraceProviderNative config={{ appName }}>
-      <App />
-    </FloTraceProviderNative>
-  );
-}
-
-AppRegistry.registerComponent(appName, () => Root);
+AppRegistry.registerComponent(appName, () => () => (
+  <FloTraceProviderNative config={{ appName }}>
+    <App />
+  </FloTraceProviderNative>
+));
 ```
 
-Launch the FloTrace desktop app, start Metro (`npx expo start` or `npx react-native start`), open your app — the component tree appears automatically.
+Launch the FloTrace desktop. Start Metro. Open your app. Tree appears.
 
-## Connectivity
+**Peer dependencies:** `react >= 16.9.0`, `react-native >= 0.64.0`. Compatible with Hermes, New Architecture (Fabric + TurboModules), bridgeless mode.
 
-FloTrace runtime connects to the desktop over WebSocket on port `3457`. The native adapter auto-resolves the desktop host from Metro:
+---
 
-| Topology | Host used | Notes |
-|---|---|---|
-| iOS simulator | `127.0.0.1` | Simulator shares the host's loopback. |
-| Android emulator | `10.0.2.2` | Emulator's alias for the host machine. |
-| Physical device over USB | Metro's `scriptURL` host | Run `adb reverse tcp:3457 tcp:3457` first on Android. |
-| Physical device over LAN (WiFi) | Metro's `scriptURL` host | Requires `authToken` — see below. |
+## React Navigation: wire `navigationRef` (strongly recommended)
 
-You can override detection by passing `config.host`:
-
-```tsx
-<FloTraceProviderNative config={{ appName: 'My App', host: '192.168.1.42' }}>
-```
-
-### LAN connections (physical-device over WiFi)
-
-To keep the WebSocket server safe on shared networks, FloTrace desktop binds to `127.0.0.1` by default. Enable LAN mode in **Settings → LAN Access**; it generates a 32-character auth token. Copy the token into your app config:
-
-```tsx
-<FloTraceProviderNative config={{ appName: 'My App', authToken: 'FT-xxxxxxxx...' }}>
-```
-
-Loopback connections (simulator / emulator / `adb reverse`) are exempt from auth — no token needed.
-
-## React Navigation integration (active-screen filter)
-
-**Strongly recommended.** Without this wiring, `react-native-screens` keeps previously-visited screens mounted in the background and they all show up in the FloTrace tree — making it hard to see what's actually on screen. Passing a `navigationRef` lets FloTrace prune subtrees for inactive routes so the tree stays scoped to the current screen.
-
-The same ref needs to be on **both** `<NavigationContainer>` and `<FloTraceProviderNative>`. The cleanest way to avoid an import cycle is a tiny shared module:
+Without this, `react-native-screens` keeps every visited screen mounted in the background and the tree fills up with stale routes. Pass a shared ref to both `<NavigationContainer>` and `<FloTraceProviderNative>`:
 
 ```ts
 // src/navigation/navigationRef.ts
@@ -133,35 +107,74 @@ export default function App() {
 }
 ```
 
-Visible `<Modal>` overlays and `react-native-screens` active screens (`activityState === 2`) stay in the tree even when the underlying route isn't focused. If you forget the `navigationRef` prop, FloTrace prints a one-shot dev warning a few seconds after mount pointing you back to this section.
+Visible `<Modal>` overlays and active `react-native-screens` (`activityState === 2`) stay in the tree even when the route isn't focused. Forget the prop and FloTrace prints a one-shot dev warning a few seconds after mount.
+
+---
+
+## Connectivity (auto-detected)
+
+| Topology | Host used | Extra setup |
+|---|---|---|
+| iOS simulator | `127.0.0.1` | none |
+| Android emulator | `10.0.2.2` | none |
+| Physical device over USB | Metro `scriptURL` host | Android: `adb reverse tcp:3457 tcp:3457` |
+| Physical device over WiFi | Metro `scriptURL` host | Enable LAN mode in desktop **Settings → LAN Access**, copy `authToken` into config |
+
+```tsx
+// LAN / WiFi:
+<FloTraceProviderNative config={{ appName: 'My App', authToken: 'FT-xxxxxxxx...' }}>
+
+// Override host explicitly:
+<FloTraceProviderNative config={{ appName: 'My App', host: '192.168.1.42' }}>
+```
+
+Loopback connections (sim / emulator / `adb reverse`) are exempt from auth.
+
+---
+
+## Wire up your state stores
+
+```tsx
+import { FloTraceProviderNative } from '@flotrace/runtime-native';
+import { useUserStore } from './zustandStore';
+import { store as reduxStore } from './reduxStore';
+import { queryClient } from './queryClient';
+
+<FloTraceProviderNative
+  config={{ appName: 'My App' }}
+  stores={{ userStore: useUserStore }}
+  reduxStore={reduxStore}
+  queryClient={queryClient}
+>
+  <App />
+</FloTraceProviderNative>
+```
+
+---
 
 ## Configuration
 
-All options are optional.
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `appName` | `string` | `'React Native App'` | App name shown in the FloTrace pill. |
-| `port` | `number` | `3457` | WebSocket server port. |
-| `host` | `string` | auto-detected | Explicit desktop host (skips Metro resolution). |
-| `authToken` | `string` | `undefined` | Required for LAN connections; ignored on loopback. |
-| `appId` | `string` | `undefined` | Stable identifier when multiple apps are connected. |
-| `appVersion` | `string` | `undefined` | Displayed in the connection tooltip. |
-| `enabled` | `boolean` | `__DEV__` | Set to `false` to hard-disable. |
-| `autoReconnect` | `boolean` | `true` | Reconnect on disconnect. |
-| `reconnectInterval` | `number` | `2000` | Base delay (ms) between reconnects (exponential backoff). |
-| `trackAllRenders` | `boolean` | `true` | Track every commit via `<Profiler>`. |
-| `includeProps` | `boolean` | `true` | Include props in render events. |
-| `trackZustand` / `trackRedux` / `trackTanstackQuery` | `boolean` | `true` | Enable each state tracker. |
-| `trackNetwork` | `boolean` | `true` | Enable the RN-safe network tracker. |
+| `appName` | `string` | `'React Native App'` | Shown in the FloTrace connection pill |
+| `port` | `number` | `3457` | WebSocket port |
+| `host` | `string` | auto | Override Metro detection |
+| `authToken` | `string` | `undefined` | Required for LAN; ignored on loopback |
+| `appId` / `appVersion` | `string` | `undefined` | Identity + version metadata |
+| `enabled` | `boolean` | `__DEV__` | `false` to hard-disable |
+| `autoReconnect` / `reconnectInterval` | | `true` / `2000ms` | Backoff config |
+| `trackAllRenders` / `includeProps` | `boolean` | `true` | Render tracking |
+| `trackZustand` / `trackRedux` / `trackTanstackQuery` / `trackNetwork` | `boolean` | `true` | Per-tracker toggles |
+
+---
 
 ## Production safety
 
-`FloTraceProviderNative` is a **no-op when `__DEV__ === false`** — it renders `children` without touching the fiber tree, WebSocket, or any trackers. You don't need to guard it manually, and bundlers that tree-shake on `__DEV__` will drop most of the package from production builds.
+`FloTraceProviderNative` is a **no-op when `__DEV__ === false`** — it renders `children` and touches nothing else. Bundlers that tree-shake on `__DEV__` drop most of the package from production builds.
 
-## Web + Native from the same codebase
+---
 
-If your app targets both web (React Native Web / Expo for Web) and native, use both providers — each one refuses to attach in the other's environment:
+## Web + native from one codebase
 
 ```tsx
 import { Platform } from 'react-native';
@@ -171,26 +184,30 @@ import { FloTraceProviderNative } from '@flotrace/runtime-native';
 const Provider = Platform.OS === 'web' ? FloTraceProvider : FloTraceProviderNative;
 ```
 
-`FloTraceProviderNative` refuses to attach when `typeof document !== 'undefined'`; `FloTraceProvider` refuses when `navigator.product === 'ReactNative'`. Prevents double-attach.
+Both providers refuse to attach in the wrong environment (the web one bails on `navigator.product === 'ReactNative'`, the native one bails on `typeof document !== 'undefined'`) so double-wrapping is safe.
+
+---
+
+## Privacy & security
+
+- Source code never leaves your device.
+- Desktop binds to `127.0.0.1` by default; LAN access is opt-in with a per-session auth token.
+- This package is **MIT-licensed** and open at [github.com/flotrace](https://github.com/flotrace). The desktop app is closed-source commercial.
+
+---
 
 ## Troubleshooting
 
-### Nothing appears in the desktop tree
+**Nothing in the tree** — Desktop running? Android emulator host = `10.0.2.2`? `adb reverse` done for USB? `authToken` set for WiFi? Check Metro console for `[FloTrace]` logs.
 
-1. Is the desktop app running?
-2. On Android emulator: is your metro host `10.0.2.2` (auto-detected; override only if custom)?
-3. On physical device over USB: did you run `adb reverse tcp:3457 tcp:3457`?
-4. On physical device over WiFi: did you enable LAN mode in desktop settings and paste the `authToken`?
-5. Check the Metro console for `[FloTrace]` logs.
+**Tree looks too sparse** — RN view defaults to user-only. Library wrappers are hidden. Toggle "Show framework & library nodes" in desktop **Settings → Graph** to see them (note: significant render cost).
 
-### Tree looks too empty
+**"Connection stale" banner** — Desktop pings every 5s; flags stale after 10s of silence. Usually means JS bridge froze or native thread crashed. Restart the app; check `adb logcat` / Xcode console.
 
-The RN desktop view defaults to **user-only** — framework/library wrappers (`NavigationContainer`, `GestureHandlerRootView`, `react-native-screens`, Reanimated, Safe Area, etc.) are hidden automatically. You can toggle them back on in the desktop's **Settings → Graph** tab (note: re-enables significant render cost).
+**Network requests missing** — Some libraries patch `fetch` first and don't forward through. Pass `trackNetwork: false` and patch manually if needed; or report the library so we can add it to our compatibility list.
 
-### "Connection stale" banner
-
-The desktop sends a ping every 5s and flags the connection stale after 10s of silence. It usually means the JS bridge froze or the native thread crashed. Restart the app; if it happens repeatedly, check native-side logs (`adb logcat` / Xcode console).
+---
 
 ## License
 
-MIT
+MIT. Issues and PRs welcome at [github.com/flotrace](https://github.com/flotrace).
