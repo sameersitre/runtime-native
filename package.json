@@ -14,7 +14,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -56,10 +58,13 @@
     "flotrace"
   ],
   "license": "MIT",
+  "homepage": "https://flotrace.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/flotrace/flotrace.git",
-    "directory": "packages/runtime-native"
+    "url": "https://github.com/sameersitre/runtime-native.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sameersitre/runtime-native/issues"
   },
   "publishConfig": {
     "access": "public"
