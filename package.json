@@ -1,6 +1,6 @@
 {
   "name": "@flotrace/runtime-native",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "React Native adapter for FloTrace — enables real-time render tracking in iOS/Android apps via Metro.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -29,7 +29,7 @@
     "release:major": "npm version major && npm publish"
   },
   "dependencies": {
-    "@flotrace/runtime-core": "2.2.2"
+    "@flotrace/runtime-core": "2.2.3"
   },
   "peerDependencies": {
     "react": ">=16.9.0",
