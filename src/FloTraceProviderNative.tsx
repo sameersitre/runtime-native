@@ -277,6 +277,14 @@ export function FloTraceProviderNative({
 
     const client = getWebSocketClient();
 
+    // Install the network tracker immediately — before connect() — so API calls
+    // made in sibling useEffect hooks during the same commit are captured.
+    // The tracker's send() queues messages while the socket is connecting and
+    // flushes them automatically on open. The server's ext:startTracking will
+    // be a no-op (isInstalled guard) if trackNetwork=true, or will uninstall
+    // if the Network panel is hidden (handled in the ext:startTracking branch).
+    safeTrackerOp('Network eager-install', () => installNetworkTrackerNative(client));
+
     const unsubConnection = client.onConnectionChange((isConnected) => {
       setConnected(isConnected);
       if (isConnected) requestFullSnapshot();
@@ -315,9 +323,14 @@ export function FloTraceProviderNative({
               );
             }
             if (message.options?.trackNetwork) {
+              // No-op if already eagerly installed before connect().
               safeTrackerOp('Network install', () =>
                 installNetworkTrackerNative(client),
               );
+            } else {
+              // Network panel is hidden — honour the server's intent by stopping
+              // the eagerly-installed tracker (uninstall is idempotent).
+              safeTrackerOp('Network uninstall (panel off)', uninstallNetworkTrackerNative);
             }
             // Router tracker is web-only (History API); skipped on RN.
             safeTrackerOp('Timeline install', () => installTimelineTracker(client));
