@@ -62,7 +62,11 @@ let readyPollTimer: ReturnType<typeof setInterval> | null = null;
 // `clearInterval` on a stale handle can throw under some RN shims, so guard.
 function stopReadyPolling(): void {
   if (readyPollTimer) {
-    try { clearInterval(readyPollTimer); } catch { /* non-fatal */ }
+    try {
+      clearInterval(readyPollTimer);
+    } catch {
+      /* non-fatal */
+    }
     readyPollTimer = null;
   }
 }
@@ -157,7 +161,11 @@ export function installNavigationTracker(ref: NavigationRefLike | null | undefin
 export function disposeNavigationTracker(): void {
   stopReadyPolling();
   if (unsubscribe) {
-    try { unsubscribe(); } catch { /* non-fatal */ }
+    try {
+      unsubscribe();
+    } catch {
+      /* non-fatal */
+    }
     unsubscribe = null;
   }
   activeRef = null;

@@ -29,11 +29,7 @@ interface RNResponse {
 }
 
 interface RNAbortSignal {
-  addEventListener(
-    type: 'abort',
-    listener: () => void,
-    options?: { once?: boolean },
-  ): void;
+  addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void;
 }
 
 interface RNRequestInit {

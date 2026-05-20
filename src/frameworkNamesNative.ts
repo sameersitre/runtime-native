@@ -21,11 +21,11 @@
 const RN_CORE: readonly string[] = [
   'AppContainer',
   'RootTagContext',
-  'RCTView',            // Leaks through as user-component-tag on some RN versions
+  'RCTView', // Leaks through as user-component-tag on some RN versions
   'RCTText',
   'RCTScrollView',
-  'View',               // RN core <View>
-  'Text',               // RN core <Text>
+  'View', // RN core <View>
+  'Text', // RN core <Text>
   'ScrollView',
   'FlatList',
   'SectionList',
@@ -38,7 +38,7 @@ const RN_CORE: readonly string[] = [
   'TouchableWithoutFeedback',
   'TouchableNativeFeedback',
   'Pressable',
-  'Modal',              // RN core <Modal> wrapper — host view is RCTModalHostView
+  'Modal', // RN core <Modal> wrapper — host view is RCTModalHostView
   'ModalRenderer',
   'RefreshControl',
   'ActivityIndicator',
@@ -47,7 +47,7 @@ const RN_CORE: readonly string[] = [
   'Image',
   'ImageBackground',
   'TextInput',
-  'SafeAreaView',       // Legacy RN core; also comes from react-native-safe-area-context
+  'SafeAreaView', // Legacy RN core; also comes from react-native-safe-area-context
 ];
 
 /** React Navigation v6 / v7 (@react-navigation/*). */
@@ -56,12 +56,12 @@ const REACT_NAVIGATION: readonly string[] = [
   'NavigationContainerInner',
   'NavigationContent',
   'NavigationState',
-  'NavigationStateListenerProvider',      // v7 state-listener wrapper
+  'NavigationStateListenerProvider', // v7 state-listener wrapper
   'BaseNavigationContainer',
   'EnsureSingleNavigator',
-  'PreventRemoveProvider',                // v7
-  'ScreenWrapper',                        // @react-navigation/elements
-  'StaticContainer',                      // React Navigation perf wrapper (replaces children only when they change)
+  'PreventRemoveProvider', // v7
+  'ScreenWrapper', // @react-navigation/elements
+  'StaticContainer', // React Navigation perf wrapper (replaces children only when they change)
   'Screen',
   'SceneView',
   'StackView',
@@ -87,8 +87,8 @@ const REACT_NAVIGATION: readonly string[] = [
   'HeaderShownContext',
   'TabBar',
   'TabView',
-  'ThemeProvider',                        // @react-navigation/native theme context
-  'FrameSizeProvider',                    // @react-navigation/elements v7
+  'ThemeProvider', // @react-navigation/native theme context
+  'FrameSizeProvider', // @react-navigation/elements v7
 ];
 
 /** react-native-screens — the native-stack primitive used by React Navigation. */
@@ -105,9 +105,9 @@ const REACT_NATIVE_SCREENS: readonly string[] = [
   'NativeScreenContainer',
   'FullWindowOverlay',
   'DebugContainer',
-  'DelayedFreeze',      // react-native-screens uses react-freeze under the hood
-  'Freeze',             // react-freeze
-  'Suspender',          // react-freeze
+  'DelayedFreeze', // react-native-screens uses react-freeze under the hood
+  'Freeze', // react-freeze
+  'Suspender', // react-freeze
 ];
 
 /** react-native-gesture-handler. */
@@ -144,8 +144,8 @@ const REANIMATED: readonly string[] = [
 /** react-native-safe-area-context. */
 const SAFE_AREA: readonly string[] = [
   'SafeAreaProvider',
-  'SafeAreaProviderShim',   // v5 internal shim
-  'SafeAreaEnv',            // v5 env wrapper
+  'SafeAreaProviderShim', // v5 internal shim
+  'SafeAreaEnv', // v5 env wrapper
   'SafeAreaInsetsContext',
   'SafeAreaFrameContext',
   'SafeAreaConsumer',

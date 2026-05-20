@@ -49,8 +49,7 @@ export function resolveMetroHost(
   Platform: RNPlatform,
   NativeModules: RNNativeModules,
 ): MetroHostResolution {
-  const platform: 'ios' | 'android' =
-    Platform.OS === 'android' ? 'android' : 'ios';
+  const platform: 'ios' | 'android' = Platform.OS === 'android' ? 'android' : 'ios';
 
   // 1. Explicit override
   if (configHost && configHost.length > 0) {

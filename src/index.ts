@@ -22,11 +22,7 @@
 export * from '@flotrace/runtime-core';
 
 // Native-only provider + hook
-export {
-  FloTraceProviderNative,
-  useFloTrace,
-  useTrackProps,
-} from './FloTraceProviderNative';
+export { FloTraceProviderNative, useFloTrace, useTrackProps } from './FloTraceProviderNative';
 export type { FloTraceProviderNativeProps } from './FloTraceProviderNative';
 
 // Metro host resolver (exported for tests / advanced configuration)
@@ -56,7 +52,4 @@ export type { NavigationRefLike } from './navigationTracker';
 // provider when `trackNetwork` is enabled; exported for advanced setups.
 // Note: findFetchOrigin / hasActiveTags are re-exported above via
 // `export * from '@flotrace/runtime-core'`.
-export {
-  installNetworkTrackerNative,
-  uninstallNetworkTrackerNative,
-} from './networkTrackerNative';
+export { installNetworkTrackerNative, uninstallNetworkTrackerNative } from './networkTrackerNative';

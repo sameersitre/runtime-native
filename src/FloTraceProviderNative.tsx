@@ -68,10 +68,7 @@ import {
   shouldPruneNode,
   type NavigationRefLike,
 } from './navigationTracker';
-import {
-  installNetworkTrackerNative,
-  uninstallNetworkTrackerNative,
-} from './networkTrackerNative';
+import { installNetworkTrackerNative, uninstallNetworkTrackerNative } from './networkTrackerNative';
 import { resolveNativeAppIdentity, getReactNativeVersion } from './nativeAppIdentity';
 // Static import — ESM-compiled output (`.mjs`) would otherwise rely on tsup's `__require`
 // shim, which fails under iOS bridgeless / Hermes New Architecture where `require` is not
@@ -163,7 +160,7 @@ export function FloTraceProviderNative({
   if (typeof (globalThis as { document?: unknown }).document !== 'undefined') {
     console.warn(
       '[FloTrace] FloTraceProviderNative (from @flotrace/runtime-native) detected a browser environment. ' +
-      'Install @flotrace/runtime and use FloTraceProvider instead. Skipping attach.',
+        'Install @flotrace/runtime and use FloTraceProvider instead. Skipping attach.',
     );
     return <>{children}</>;
   }
@@ -253,8 +250,8 @@ export function FloTraceProviderNative({
           if (name === 'NavigationContainer' || name === 'BaseNavigationContainer') {
             console.warn(
               '[FloTrace] NavigationContainer detected but no `navigationRef` prop was passed ' +
-              'to FloTraceProviderNative — the tree will include components from inactive ' +
-              'screens. See https://flotrace.dev/docs/react-native#navigation-ref',
+                'to FloTraceProviderNative — the tree will include components from inactive ' +
+                'screens. See https://flotrace.dev/docs/react-native#navigation-ref',
             );
             return;
           }
@@ -324,9 +321,7 @@ export function FloTraceProviderNative({
             }
             if (message.options?.trackNetwork) {
               // No-op if already eagerly installed before connect().
-              safeTrackerOp('Network install', () =>
-                installNetworkTrackerNative(client),
-              );
+              safeTrackerOp('Network install', () => installNetworkTrackerNative(client));
             } else {
               // Network panel is hidden — honour the server's intent by stopping
               // the eagerly-installed tracker (uninstall is idempotent).
@@ -493,9 +488,7 @@ export function FloTraceProviderNative({
             break;
 
           case 'ext:startNetworkCapture':
-            safeTrackerOp('Network install', () =>
-              installNetworkTrackerNative(client),
-            );
+            safeTrackerOp('Network install', () => installNetworkTrackerNative(client));
             break;
           case 'ext:stopNetworkCapture':
             safeTrackerOp('Network uninstall', uninstallNetworkTrackerNative);
@@ -505,10 +498,7 @@ export function FloTraceProviderNative({
             break;
         }
       } catch (error) {
-        console.error(
-          `[FloTrace] (native) Error handling message type "${message.type}":`,
-          error,
-        );
+        console.error(`[FloTrace] (native) Error handling message type "${message.type}":`, error);
       }
     });
 

@@ -18,10 +18,7 @@
  * `./rnGlobals.d.ts` because `runtime-native`'s tsconfig excludes `lib: ["DOM"]`.
  */
 
-import type {
-  NetworkRequestEntry,
-  FloTraceWebSocketClient,
-} from '@flotrace/runtime-core';
+import type { NetworkRequestEntry, FloTraceWebSocketClient } from '@flotrace/runtime-core';
 import {
   getCurrentRenderingFiber,
   getComponentNameFromFiber,
@@ -85,18 +82,21 @@ const NOISE_URL_PATTERNS: RegExp[] = [
   /\/_expo\//i,
   /expo-updates/i,
   // Analytics & telemetry (cross-platform noise)
-  /google-analytics\.com/i, /googletagmanager\.com/i,
-  /facebook\.com\/tr/i, /segment\.io/i, /mixpanel\.com/i,
-  /amplitude\.com/i, /sentry\.io/i, /bugsnag\.com/i, /datadog/i,
+  /google-analytics\.com/i,
+  /googletagmanager\.com/i,
+  /facebook\.com\/tr/i,
+  /segment\.io/i,
+  /mixpanel\.com/i,
+  /amplitude\.com/i,
+  /sentry\.io/i,
+  /bugsnag\.com/i,
+  /datadog/i,
   // FloTrace's own WebSocket
   /:3457(\/|$)/,
 ];
 
 /** Pre-combined regex for O(1) noise URL matching (mirrors web tracker). */
-const COMBINED_NOISE_PATTERN = new RegExp(
-  NOISE_URL_PATTERNS.map((r) => r.source).join('|'),
-  'i',
-);
+const COMBINED_NOISE_PATTERN = new RegExp(NOISE_URL_PATTERNS.map((r) => r.source).join('|'), 'i');
 
 // ============================================================================
 // Module state
@@ -280,7 +280,11 @@ function patchXhr(): void {
         xhr.response !== null &&
         typeof xhr.response === 'object'
       ) {
-        try { tagFetchData(xhr.response, requestId, 0); } catch { /* best-effort */ }
+        try {
+          tagFetchData(xhr.response, requestId, 0);
+        } catch {
+          /* best-effort */
+        }
       }
     });
 

@@ -96,7 +96,10 @@ export function resolveNativeAppIdentity(fallbackName: string): NativeAppIdentit
     try {
       const settings = (NativeModules.SettingsManager as { settings?: IOSSettings } | undefined)
         ?.settings;
-      if (settings && (settings.CFBundleIdentifier || settings.CFBundleDisplayName || settings.CFBundleName)) {
+      if (
+        settings &&
+        (settings.CFBundleIdentifier || settings.CFBundleDisplayName || settings.CFBundleName)
+      ) {
         return {
           appId: settings.CFBundleIdentifier,
           appName: settings.CFBundleDisplayName ?? settings.CFBundleName,
@@ -126,16 +129,18 @@ export function resolveNativeAppIdentity(fallbackName: string): NativeAppIdentit
  */
 export function getReactNativeVersion(): string | undefined {
   try {
-    const c = (Platform as unknown as {
-      constants?: {
-        reactNativeVersion?: {
-          major?: number;
-          minor?: number;
-          patch?: number;
-          prerelease?: string | null;
+    const c = (
+      Platform as unknown as {
+        constants?: {
+          reactNativeVersion?: {
+            major?: number;
+            minor?: number;
+            patch?: number;
+            prerelease?: string | null;
+          };
         };
-      };
-    }).constants;
+      }
+    ).constants;
     const v = c?.reactNativeVersion;
     if (!v || typeof v.major !== 'number') return undefined;
     const base = `${v.major}.${v.minor ?? 0}.${v.patch ?? 0}`;
