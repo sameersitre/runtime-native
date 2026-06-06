@@ -142,6 +142,28 @@ Visible `<Modal>` overlays and active `react-native-screens` (`activityState ===
 
 ---
 
+## Source attribution (click-to-IDE) — optional Babel plugin
+
+Add the FloTrace Babel plugin to get exact `file:line:column` attribution on every component — powering click-to-IDE, breadcrumb file pills, Hot Call Sites, and accurate user-vs-framework differentiation. It ships **inside this package**, so there's nothing extra to install.
+
+```js
+// babel.config.js
+module.exports = {
+  presets: ['module:@react-native/babel-preset'],
+  env: {
+    development: {
+      plugins: ['@flotrace/runtime-native/babel-plugin'],
+    },
+  },
+};
+```
+
+The `env.development` block keeps it dev-only — production bundles stay clean (no path leakage, no bundle bloat). Restart Metro with `--reset-cache` after adding it.
+
+> **Why a Babel plugin on RN (not `jsxImportSource`)?** Metro is always Babel, and `jsxImportSource` — the web opt-in — is a no-op here because nativewind already claims the single `importSource` slot. The plugin tags JSX with a string-keyed `data-flotrace-src` attribute instead, which coexists with nativewind and survives React 19's keyed-element prop clone. Web projects use `"jsxImportSource": "@flotrace/runtime-core"` in `tsconfig.json` (or `@flotrace/runtime/babel-plugin` for CRA / Babel-only builds) — it's the same plugin, re-exported from each adapter, with one canonical implementation in `@flotrace/runtime-core`.
+
+---
+
 ## Connectivity (auto-detected)
 
 | Topology | Host used | Extra setup |
