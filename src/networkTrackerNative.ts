@@ -18,13 +18,24 @@
  * `./rnGlobals.d.ts` because `runtime-native`'s tsconfig excludes `lib: ["DOM"]`.
  */
 
-import type { NetworkRequestEntry, FloTraceWebSocketClient } from '@flotrace/runtime-core';
+import type {
+  NetworkRequestEntry,
+  FloTraceWebSocketClient,
+  SerializedValue,
+} from '@flotrace/runtime-core';
 import {
   getCurrentRenderingFiber,
   getComponentNameFromFiber,
   buildAncestorChain,
   tagFetchData,
   clearFetchOriginTags,
+  serializeValue,
+  parseQueryParams,
+  headersToRecord,
+  parseRawHeaders,
+  serializeRequestBody,
+  serializeResponseText,
+  isStreamingContentType,
 } from '@flotrace/runtime-core';
 
 // ============================================================================
@@ -36,6 +47,8 @@ interface XhrWithMeta extends RNXHR {
   __ftMethod?: string;
   __ftUrl?: string;
   __ftRequestId?: string;
+  /** Request headers accumulated via the patched setRequestHeader. */
+  __ftReqHeaders?: Record<string, string>;
 }
 
 /**
@@ -53,6 +66,8 @@ const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER_SIZE = 300;
 const DEDUPE_WINDOW_MS = 5000;
 const MAX_ANCESTOR_CHAIN = 3;
+/** Cap on the response body we read+buffer; larger bodies store a marker instead. */
+const MAX_RESPONSE_BODY_BYTES = 2_000_000;
 
 /**
  * URL path patterns that identify noise (Metro dev-server traffic, analytics
@@ -117,6 +132,7 @@ let previousFetch: RNFetch | null = null;
 /** Original XHR methods, captured so `uninstall()` can restore them. */
 let originalXhrOpen: typeof XMLHttpRequest.prototype.open | null = null;
 let originalXhrSend: typeof XMLHttpRequest.prototype.send | null = null;
+let originalXhrSetRequestHeader: typeof XMLHttpRequest.prototype.setRequestHeader | null = null;
 
 /** Sliding window for duplicate detection: dedupeKey → last-seen timestamp. */
 const dedupeWindow = new Map<string, number>();
@@ -160,6 +176,10 @@ export function uninstallNetworkTrackerNative(): void {
     XMLHttpRequest.prototype.send = originalXhrSend;
     originalXhrSend = null;
   }
+  if (originalXhrSetRequestHeader) {
+    XMLHttpRequest.prototype.setRequestHeader = originalXhrSetRequestHeader;
+    originalXhrSetRequestHeader = null;
+  }
 
   // --- Stop the flush loop ---
   if (flushTimer) {
@@ -198,7 +218,11 @@ function patchFetch(): void {
 
     const method = (init?.method ?? 'GET').toUpperCase();
     const parsedUrl = parseUrl(url);
-    const entry = createEntry(method, parsedUrl);
+    const entry = createEntry(method, parsedUrl, {
+      url,
+      headers: headersToRecord(init?.headers),
+      body: init?.body,
+    });
     const startTime = nowMs();
 
     // { once: true } prevents listener leaks when callers reuse an
@@ -228,10 +252,19 @@ function patchFetch(): void {
         entry.status = response.status;
         entry.durationMs = nowMs() - startTime;
         entry.responseSizeBytes = parseContentLength(response.headers);
+        entry.responseHeaders = headersToRecord(response.headers);
         if (!response.ok) {
           entry.errorMessage = `${response.status} ${response.statusText}`;
         }
         pushEntry(entry);
+
+        // Read the body off a clone so the app's own body read stays intact, then
+        // re-push so the requestId upsert fills in responseBody on the existing row.
+        try {
+          void captureFetchResponseBody(response.clone(), entry);
+        } catch {
+          /* clone can throw if the body is already disturbed — skip */
+        }
       }
 
       return response;
@@ -256,6 +289,18 @@ function patchXhr(): void {
 
   originalXhrOpen = XMLHttpRequest.prototype.open;
   originalXhrSend = XMLHttpRequest.prototype.send;
+  originalXhrSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+  // --- setRequestHeader(): accumulate request headers so send() can attach them. ---
+  XMLHttpRequest.prototype.setRequestHeader = function (
+    this: RNXHR,
+    name: string,
+    value: string,
+  ) {
+    const xhr = this as XhrWithMeta;
+    (xhr.__ftReqHeaders ??= {})[name] = value;
+    return originalXhrSetRequestHeader!.call(this, name, value);
+  };
 
   // --- open(): stash method + url; register an early 'load' listener so we
   // run before any caller-added listeners. When responseType is 'json', RN's
@@ -270,6 +315,8 @@ function patchXhr(): void {
     const xhr = this as XhrWithMeta;
     xhr.__ftMethod = method.toUpperCase();
     xhr.__ftUrl = typeof url === 'string' ? url : url.href;
+    // Reset header accumulator in case this XHR instance is being reused.
+    xhr.__ftReqHeaders = undefined;
 
     xhr.addEventListener('load', function () {
       const requestId = xhr.__ftRequestId;
@@ -304,7 +351,11 @@ function patchXhr(): void {
 
     const method = xhr.__ftMethod ?? 'GET';
     const parsedUrl = parseUrl(url);
-    const entry = createEntry(method, parsedUrl);
+    const entry = createEntry(method, parsedUrl, {
+      url,
+      headers: xhr.__ftReqHeaders,
+      body,
+    });
     const startTime = nowMs();
 
     xhr.__ftRequestId = entry.requestId;
@@ -316,6 +367,8 @@ function patchXhr(): void {
       entry.status = this.status;
       entry.durationMs = nowMs() - startTime;
       entry.responseSizeBytes = parseXhrContentLength(this);
+      entry.responseHeaders = parseRawHeaders(this.getAllResponseHeaders());
+      entry.responseBody = captureXhrResponseBody(this);
       if (this.status >= 400) {
         entry.errorMessage = `${this.status} ${this.statusText}`;
       }
@@ -346,6 +399,14 @@ function patchXhr(): void {
 function createEntry(
   method: string,
   parsedUrl: { path: string; host: string },
+  detail?: {
+    /** Full URL (with query string) for param extraction. */
+    url?: string;
+    /** Request headers, already normalized to a flat record. */
+    headers?: Record<string, string>;
+    /** Request body (fetch BodyInit or XHR body). */
+    body?: unknown;
+  },
 ): NetworkRequestEntry {
   const requestId = String(++requestCounter);
   const dedupeKey = `${method}:${parsedUrl.path}`;
@@ -372,7 +433,71 @@ function createEntry(
     // JSON.stringify drops undefined keys entirely.
     isDuplicate: isDuplicate || undefined,
     timestamp: now,
+    queryParams: detail?.url ? parseQueryParams(detail.url) : undefined,
+    requestHeaders: detail?.headers,
+    requestBody: serializeRequestBody(detail?.body),
   };
+}
+
+// ============================================================================
+// Response body capture (RN-safe — bodies are pre-buffered, no DOM streams)
+// ============================================================================
+
+/**
+ * Read a cloned fetch Response body and attach it to the entry, then re-push so the
+ * requestId-keyed upsert updates the already-flushed row in place. RN fetch bodies
+ * are XHR-backed and fully buffered (no ReadableStream), so a simple `.text()` is
+ * safe — except for SSE, which we skip by content-type.
+ */
+async function captureFetchResponseBody(
+  clone: RNResponse,
+  entry: NetworkRequestEntry,
+): Promise<void> {
+  try {
+    const contentType = clone.headers.get('content-type');
+    if (isStreamingContentType(contentType)) {
+      entry.responseBody = '[event-stream — body not captured]';
+      pushEntry(entry);
+      return;
+    }
+    const size = parseContentLength(clone.headers);
+    if (size !== null && size > MAX_RESPONSE_BODY_BYTES) {
+      entry.responseBody = `[body too large to capture: ${size} bytes]`;
+      pushEntry(entry);
+      return;
+    }
+    const text = await clone.text();
+    if (text.length > MAX_RESPONSE_BODY_BYTES) {
+      entry.responseBody = `[body too large to capture: ${text.length} bytes]`;
+    } else if (text.length > 0) {
+      entry.responseBody = serializeResponseText(text, contentType);
+    }
+    pushEntry(entry);
+  } catch {
+    /* best-effort: body may be locked/unreadable */
+  }
+}
+
+/** Serialize an XHR response body from `.response` (json/object) or `.responseText`. */
+function captureXhrResponseBody(xhr: RNXHR): SerializedValue | undefined {
+  if (xhr.responseType === 'json' && xhr.response !== null && typeof xhr.response === 'object') {
+    return serializeValue(xhr.response);
+  }
+  if (isStreamingContentType(xhr.getResponseHeader('content-type'))) {
+    return '[event-stream — body not captured]';
+  }
+  let text: string;
+  try {
+    // Reading responseText throws for responseType 'arraybuffer'/'blob' — fall back to a marker.
+    text = xhr.responseText;
+  } catch {
+    return '[binary response]';
+  }
+  if (!text) return undefined;
+  if (text.length > MAX_RESPONSE_BODY_BYTES) {
+    return `[body too large to capture: ${text.length} bytes]`;
+  }
+  return serializeResponseText(text, xhr.getResponseHeader('content-type'));
 }
 
 function getAttribution(): {

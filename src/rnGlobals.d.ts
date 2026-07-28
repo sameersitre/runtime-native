@@ -19,6 +19,7 @@
 
 interface RNHeaders {
   get(name: string): string | null;
+  forEach(callback: (value: string, key: string) => void): void;
 }
 
 interface RNResponse {
@@ -26,6 +27,9 @@ interface RNResponse {
   status: number;
   statusText: string;
   headers: RNHeaders;
+  /** Independent copy so the body can be read without disturbing the app's stream. */
+  clone(): RNResponse;
+  text(): Promise<string>;
 }
 
 interface RNAbortSignal {
@@ -35,6 +39,10 @@ interface RNAbortSignal {
 interface RNRequestInit {
   method?: string;
   signal?: RNAbortSignal;
+  /** Headers (Headers | [k,v][] | object) — captured for request detail. */
+  headers?: unknown;
+  /** Request body — captured (serialized) for request detail. */
+  body?: unknown;
 }
 
 interface RNRequestLike {
@@ -68,6 +76,8 @@ interface RNXHR extends RNXHREventTarget {
   responseText: string;
   responseType: string;
   getResponseHeader(name: string): string | null;
+  getAllResponseHeaders(): string;
+  setRequestHeader(name: string, value: string): void;
   open(
     method: string,
     url: string | RNURL,
