@@ -147,7 +147,7 @@ export function FloTraceProviderNative({
   reduxStore,
   queryClient,
   navigationRef,
-}: FloTraceProviderNativeProps): JSX.Element {
+}: FloTraceProviderNativeProps): React.JSX.Element {
   // Prod-build no-op. Metro strips `__DEV__` guards in release mode, so the entire
   // subtree below this check is tree-shaken out of production bundles.
   if (typeof __DEV__ !== 'undefined' && !__DEV__) {
