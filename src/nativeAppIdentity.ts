@@ -58,7 +58,7 @@ type IOSSettings = {
 export function resolveNativeAppIdentity(fallbackName: string): NativeAppIdentity {
   // 1. Expo — covers Expo managed + bare-with-Expo projects.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Expo = require('expo-application') as ExpoApplicationModule;
     if (Expo.applicationId || Expo.applicationName) {
       return {
@@ -74,7 +74,7 @@ export function resolveNativeAppIdentity(fallbackName: string): NativeAppIdentit
 
   // 2. react-native-device-info — de facto standard for bare RN CLI.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const DeviceInfo = require('react-native-device-info') as DeviceInfoModule;
     const appId = DeviceInfo.getBundleId?.();
     const appName = DeviceInfo.getApplicationName?.();

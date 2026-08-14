@@ -292,11 +292,7 @@ function patchXhr(): void {
   originalXhrSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
 
   // --- setRequestHeader(): accumulate request headers so send() can attach them. ---
-  XMLHttpRequest.prototype.setRequestHeader = function (
-    this: RNXHR,
-    name: string,
-    value: string,
-  ) {
+  XMLHttpRequest.prototype.setRequestHeader = function (this: RNXHR, name: string, value: string) {
     const xhr = this as XhrWithMeta;
     (xhr.__ftReqHeaders ??= {})[name] = value;
     return originalXhrSetRequestHeader!.call(this, name, value);
@@ -335,7 +331,6 @@ function patchXhr(): void {
       }
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (originalXhrOpen as any).apply(this, [method, url, ...rest]);
   } as typeof XMLHttpRequest.prototype.open;
 
